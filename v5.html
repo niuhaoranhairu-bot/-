@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>艺术粒子可视化 | V62 Demo Master</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050508; color: white; font-family: "Microsoft YaHei", sans-serif; }
+        
+        #canvas-container { 
+            width: 100vw; height: 100vh; 
+            position: absolute; top: 0; left: 0; z-index: 1; 
+            display: flex; align-items: center; justify-content: center;
+            background-color: #000; 
+        }
+        
+        canvas { box-shadow: 0 0 50px rgba(0,0,0,0.8); }
+        
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute; top: 20px; left: 20px; z-index: 100; 
+            background: rgba(10, 10, 15, 0.85); backdrop-filter: blur(15px);
+            padding: 20px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); width: 300px; max-height: 90vh; overflow-y: auto;
+            pointer-events: auto; user-select: none;
+        }
+        #ui-layer::-webkit-scrollbar { width: 4px; }
+        #ui-layer::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+        h1 { font-size: 1.1rem; margin: 0 0 2px 0; letter-spacing: 2px; font-weight: 400; color: #fff; }
+        .subtitle { font-size: 0.7rem; color: #888; margin-bottom: 15px; display: block; }
+        
+        /* Sections */
+        .section-title { font-size: 0.8rem; font-weight: bold; color: #fff; margin: 15px 0 8px 0; display: flex; align-items: center; justify-content: space-between;}
+        .section-title::after { content:''; flex:1; height:1px; background:rgba(255,255,255,0.1); margin-left:10px; }
+
+        /* Buttons */
+        .btn-main {
+            border: 1px solid rgba(255,255,255,0.2); color: white;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            padding: 10px 0; border-radius: 6px; font-size: 12px; cursor: pointer; width: 100%;
+            margin-bottom: 6px; transition: 0.2s; text-align: center;
+        }
+        .btn-main:hover { background: rgba(255,255,255,0.2); }
+        .btn-main:active { transform: scale(0.98); }
+        
+        .btn-record.recording { background: #990000; border-color: #ff4444; animation: pulse 1.5s infinite; }
+        
+        /* Keyframe System Styles */
+        .keyframe-panel { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 10px;}
+        .kf-status { font-size: 0.75rem; color: #aaa; margin-bottom: 8px; display: flex; justify-content: space-between; }
+        .kf-count { color: #00ffaa; font-weight: bold; }
+        .kf-controls { display: flex; gap: 5px; }
+        .btn-kf { flex: 1; padding: 6px; font-size: 12px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #ddd; border-radius: 4px; cursor: pointer; }
+        .btn-kf:hover { background: rgba(255,255,255,0.15); }
+        .btn-kf.play { background: #00aa66; color: white; border-color: #00cc88; }
+        .btn-kf.stop { background: #aa4400; color: white; border-color: #cc5500; display: none; }
+
+        .upload-wrapper { position: relative; display: block; width: 100%; margin-bottom: 10px; }
+        .upload-wrapper input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; }
+
+        /* Grid Buttons */
+        .grid-row { display: flex; gap: 5px; margin-bottom: 10px; }
+        .grid-btn { flex: 1; padding: 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa; border-radius: 4px; cursor: pointer; font-size: 0.7rem; transition: 0.2s; }
+        .grid-btn.active { background: #fff; color: #000; font-weight: bold; box-shadow: 0 0 10px rgba(255,255,255,0.3); }
+        .weather-btn.active { background: rgba(100, 200, 255, 0.3); color: #fff; border-color: #88ccff; }
+        
+        /* Sliders */
+        .control-group { margin-bottom: 8px; }
+        .label-row { display: flex; justify-content: space-between; font-size: 0.7rem; color: #ccc; margin-bottom: 3px; }
+        input[type=range] { width: 100%; cursor: pointer; height: 4px; border-radius: 2px; accent-color: #fff; }
+        
+        /* Dynamic Control Panels */
+        .weather-panel { display: none; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px; margin-bottom: 10px; border-left: 2px solid #88ccff; }
+        
+        /* Modal */
+        #video-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.95); z-index: 200; flex-direction: column; align-items: center; justify-content: center;
+        }
+        video { max-width: 80%; max-height: 70%; border: 1px solid #333; margin-bottom: 20px; }
+        .modal-btn { padding: 10px 30px; border-radius: 20px; border: none; cursor: pointer; font-weight: bold; margin: 0 10px; text-decoration: none; }
+        .btn-save { background: #00ffaa; color: #000; }
+        .btn-close { background: #333; color: #fff; }
+        
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 2rem; letter-spacing: 5px; pointer-events: none; opacity: 0; transition: 0.3s; color: white; text-shadow: 0 0 10px white; z-index: 5;}
+        
+        @keyframes pulse { 0% {box-shadow: 0 0 0 0 rgba(255,0,0,0.4);} 70% {box-shadow: 0 0 0 10px rgba(255,0,0,0);} 100% {box-shadow: 0 0 0 0 rgba(255,0,0,0);} }
+    </style>
+    
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+      { "imports": { 
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", 
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+          "tween": "https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.esm.js"
+      } }
+    </script>
+</head>
+<body>
+
+    <div id="video-modal">
+        <h2>🎉 录制完成</h2>
+        <video id="preview-video" controls playsinline></video>
+        <div>
+            <a id="download-link" class="modal-btn btn-save">💾 保存视频</a>
+            <button id="btn-modal-close" class="modal-btn btn-close">关闭</button>
+        </div>
+    </div>
+
+    <div id="ui-layer" onmousedown="event.stopPropagation()">
+        <h1>互动粒子艺术</h1>
+        <span class="subtitle">V62 Demo Master</span>
+        
+        <div class="upload-wrapper">
+            <button class="btn-main">📂 选择图片 (点我)</button>
+            <input type="file" id="fileInput" accept="image/*" />
+        </div>
+        
+        <!-- Demo System -->
+        <div class="section-title">🎬 演示编辑器 (Demo)</div>
+        <div class="keyframe-panel">
+            <div class="kf-status">
+                <span>关键帧数量:</span>
+                <span id="kf-count-display" class="kf-count">0</span>
+            </div>
+            <div class="kf-controls">
+                <button id="btn-add-kf" class="btn-kf">➕ 添加当前帧</button>
+                <button id="btn-play-demo" class="btn-kf play">▶️ 播放演示</button>
+                <button id="btn-stop-demo" class="btn-kf stop">⏹️ 停止</button>
+                <button id="btn-clear-kf" class="btn-kf">🗑️</button>
+            </div>
+            <div style="font-size: 10px; color: #666; margin-top: 5px; text-align: center;">调整下方参数和视角 -> 点击添加</div>
+        </div>
+
+        <button id="recordBtn" class="btn-main btn-record">⏺️ 录制视频 (含音效)</button>
+        
+        <div class="section-title">📐 画幅比例</div>
+        <div class="grid-row">
+            <button class="grid-btn aspect-btn active" data-ratio="full">全屏</button>
+        </div>
+        <div class="grid-row">
+            <button class="grid-btn aspect-btn" data-ratio="1.777">16:9 (横)</button>
+            <button class="grid-btn aspect-btn" data-ratio="0.5625">9:16 (竖)</button>
+        </div>
+        <div class="grid-row">
+            <button class="grid-btn aspect-btn" data-ratio="1.333">4:3 (横)</button>
+            <button class="grid-btn aspect-btn" data-ratio="0.75">3:4 (竖)</button>
+        </div>
+        <div class="grid-row">
+            <button class="grid-btn aspect-btn" data-ratio="1.666">5:3 (横)</button>
+            <button class="grid-btn aspect-btn" data-ratio="0.6">3:5 (竖)</button>
+        </div>
+
+        <div class="section-title">🎨 风格与光效</div>
+        <div class="grid-row">
+            <button class="grid-btn palette-btn active" id="pal-0">原色</button>
+            <button class="grid-btn palette-btn" id="pal-1">赛博</button>
+            <button class="grid-btn palette-btn" id="pal-2">黑金</button>
+            <button class="grid-btn palette-btn" id="pal-3">多巴胺</button>
+        </div>
+        
+        <div class="control-group"><div class="label-row"><span>色彩饱和度</span><span id="val-sat">1.1</span></div><input type="range" id="satSlider" min="0" max="3" step="0.1" value="1.1"></div>
+        <div class="control-group"><div class="label-row"><span>辉光强度</span><span id="val-bloom">0.3</span></div><input type="range" id="bloomSlider" min="0" max="1.0" step="0.05" value="0.3"></div>
+        
+        <div class="section-title">🌊 粒子参数</div>
+        <div class="control-group"><div class="label-row"><span>粒子大小</span><span id="val-size">1.8</span></div><input type="range" id="sizeSlider" min="0.5" max="5.0" step="0.1" value="1.8"></div>
+        <div class="control-group"><div class="label-row"><span>立体厚度 (3D)</span><span id="val-depth">150</span></div><input type="range" id="depthSlider" min="0" max="800" step="10" value="150"></div>
+        <div class="control-group"><div class="label-row"><span>流动速度</span><span id="val-flow">1.2</span></div><input type="range" id="flowSlider" min="0" max="3" step="0.1" value="1.2"></div>
+        <div class="control-group"><div class="label-row"><span>密度 (细节)</span><span id="val-density">中等</span></div><input type="range" id="densitySlider" min="1" max="5" step="1" value="3"></div>
+
+        <div class="section-title">🌦️ 氛围特效</div>
+        <div class="grid-row">
+            <button class="grid-btn weather-btn" id="btn-rain">🌧️ 雨</button>
+            <button class="grid-btn weather-btn" id="btn-snow">❄️ 雪</button>
+            <button class="grid-btn weather-btn" id="btn-text">🔤 文字</button>
+        </div>
+        
+        <div id="panel-rain" class="weather-panel">
+            <div class="control-group"><div class="label-row"><span>雨量</span><span id="val-rainAmt">0.5</span></div><input type="range" id="rainAmtSlider" min="0" max="1" step="0.01" value="0.5"></div>
+        </div>
+        <div id="panel-snow" class="weather-panel">
+            <div class="control-group"><div class="label-row"><span>雪量</span><span id="val-snowAmt">0.4</span></div><input type="range" id="snowAmtSlider" min="0" max="1" step="0.01" value="0.4"></div>
+        </div>
+        <div id="panel-text" class="weather-panel">
+            <div class="control-group"><div class="label-row"><span>文字量</span><span id="val-textAmt">0.3</span></div><input type="range" id="textAmtSlider" min="0" max="1" step="0.01" value="0.3"></div>
+        </div>
+        
+        <div class="section-title">📷 快速视角</div>
+        <div class="grid-row" id="camera-controls">
+            <button class="grid-btn active" id="btn-view-front">正</button>
+            <button class="grid-btn" id="btn-view-side">侧</button>
+            <button class="grid-btn" id="btn-view-top">顶</button>
+            <button class="grid-btn" id="btn-rotate">自动旋转</button>
+        </div>
+        
+        <div style="margin-top: 10px; display: flex; gap: 5px;">
+            <button id="randomBtn" class="grid-btn">🎲 参数随机</button>
+            <button id="audioBtn" class="grid-btn">🎵 开启音乐律动</button>
+            <button id="resetBtn" class="grid-btn">↺ 重置</button>
+        </div>
+    </div>
+
+    <div id="loading">GENERATING...</div>
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        import TWEEN from 'tween';
+
+        // --- Custom Saturation Shader ---
+        const SaturationShader = {
+            uniforms: {
+                "tDiffuse": { value: null },
+                "saturation": { value: 1.0 }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float saturation;
+                varying vec2 vUv;
+                void main() {
+                    vec4 color = texture2D( tDiffuse, vUv );
+                    float gray = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+                    vec3 satColor = mix(vec3(gray), color.rgb, saturation);
+                    gl_FragColor = vec4(satColor, color.a);
+                }
+            `
+        };
+
+        // --- Configuration ---
+        const config = {
+            particleSize: 1.8, turbulence: 1.2, depthMultiplier: 150, bloomStrength: 0.3, saturation: 1.1, skipFactor: 2, paletteMode: 0,
+            weather: { rain: false, snow: false, text: false },
+            rainAmt: 0.5, rainSize: 1.0, snowAmt: 0.4, snowSize: 1.0,
+            textAmt: 0.3, textSize: 1.0, rotating: false,
+            targetAspect: null
+        };
+
+        // --- Variables ---
+        let scene, camera, renderer, composer, controls;
+        let particles, rainSys, snowSys, textSys, ambient;
+        let clock = new THREE.Clock();
+        let uniforms = null, rainUniforms = null, snowUniforms = null, textUniforms = null;
+        let lastImageData = null;
+        let mediaRecorder, recordedChunks = [], isRecording = false;
+        let audioContext, analyser, dataArray, isAudioActive = false, audioBass = 0;
+        let satPass, bloomPass;
+        
+        // --- Keyframe Variables ---
+        let keyframes = [];
+        let demoTween = null;
+        let isDemoPlaying = false;
+
+        // --- Audio System ---
+        let sysAudioCtx, sysAudioDest;
+        let rainAudio, windAudio; 
+        
+        function setupSystemAudio() {
+            if (sysAudioCtx) return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            sysAudioCtx = new AudioContext();
+            sysAudioDest = sysAudioCtx.createMediaStreamDestination();
+
+            const createSource = (url) => {
+                const audio = new Audio();
+                audio.crossOrigin = "anonymous";
+                audio.loop = true;
+                audio.volume = 0.5;
+                audio.onerror = (e) => { console.warn("Audio load failed:", url); };
+                audio.src = url;
+                let source;
+                try {
+                    source = sysAudioCtx.createMediaElementSource(audio);
+                    source.connect(sysAudioCtx.destination);
+                    source.connect(sysAudioDest);
+                } catch(e) { console.warn("Audio connect error:", e); }
+                return { audio, source };
+            };
+
+            const rainObj = createSource('https://actions.google.com/sounds/v1/weather/rain_heavy_loud.ogg');
+            rainAudio = rainObj.audio;
+            const windObj = createSource('https://actions.google.com/sounds/v1/weather/wind_medium_continuous.ogg');
+            windAudio = windObj.audio;
+        }
+        
+        let mouse = new THREE.Vector2(999,999), raycaster = new THREE.Raycaster();
+        let isExploding = false, explodeVal = 0;
+        let isVortex = false, vortexVal = 0;
+        let rainLimitTop = 800, rainLimitBottom = 800;
+        let snowLimitTop = 800, snowLimitBottom = 800;
+        let textLimitTop = 800, textLimitBottom = 800;
+
+        const snoise = `vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}float snoise(vec3 v){const vec2 C=vec2(1.0/6.0,1.0/3.0);const vec4 D=vec4(0.0,0.5,1.0,2.0);vec3 i=floor(v+dot(v,C.yyy));vec3 x0=v-i+dot(i,C.xxx);vec3 g=step(x0.yzx,x0.xyz);vec3 l=1.0-g;vec3 i1=min(g.xyz,l.zxy);vec3 i2=max(g.xyz,l.zxy);vec3 x1=x0-i1+C.xxx;vec3 x2=x0-i2+C.yyy;vec3 x3=x0-D.yyy;i=mod289(i);vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));float n_=0.142857142857;vec3 ns=n_*D.wyz-D.xzx;vec4 j=p-49.0*floor(p*ns.z*ns.z);vec4 x_=floor(j*ns.z);vec4 y_=floor(j-7.0*x_);vec4 x=x_*ns.x+ns.yyyy;vec4 y=y_*ns.x+ns.yyyy;vec4 h=1.0-abs(x)-abs(y);vec4 b0=vec4(x.xy,y.xy);vec4 b1=vec4(x.zw,y.zw);vec4 s0=floor(b0)*2.0+1.0;vec4 s1=floor(b1)*2.0+1.0;vec4 sh=-step(h,vec4(0.0));vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;vec3 p0=vec3(a0.xy,h.x);vec3 p1=vec3(a0.zw,h.y);vec3 p2=vec3(a1.xy,h.z);vec3 p3=vec3(a1.zw,h.w);vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0);m=m*m;return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));}`;
+
+        // --- Keyframe & Demo Logic ---
+        function addKeyframe() {
+            const frame = {
+                position: camera.position.clone(),
+                target: controls.target.clone(),
+                config: JSON.parse(JSON.stringify(config)),
+                time: 3000
+            };
+            keyframes.push(frame);
+            document.getElementById('kf-count-display').innerText = keyframes.length;
+            
+            const panel = document.querySelector('.keyframe-panel');
+            panel.style.borderColor = "#00ffaa";
+            setTimeout(() => panel.style.borderColor = "rgba(255,255,255,0.05)", 300);
+        }
+
+        function clearKeyframes() {
+            keyframes = [];
+            document.getElementById('kf-count-display').innerText = "0";
+            stopDemo();
+        }
+
+        function playDemo() {
+            if (keyframes.length < 2) { alert("请至少添加 2 个关键帧来生成路径！"); return; }
+            isDemoPlaying = true;
+            controls.enabled = false;
+            document.getElementById('btn-play-demo').style.display = 'none';
+            document.getElementById('btn-stop-demo').style.display = 'block';
+            animateKeyframe(0);
+        }
+
+        function stopDemo() {
+            isDemoPlaying = false;
+            if(demoTween) demoTween.stop();
+            TWEEN.removeAll();
+            controls.enabled = true;
+            document.getElementById('btn-play-demo').style.display = 'block';
+            document.getElementById('btn-stop-demo').style.display = 'none';
+        }
+
+        function animateKeyframe(index) {
+            if (!isDemoPlaying) return;
+            if (index >= keyframes.length - 1) { animateKeyframe(0); return; }
+
+            const startFrame = keyframes[index];
+            const endFrame = keyframes[index + 1];
+            
+            const proxy = { t: 0 };
+            
+            demoTween = new TWEEN.Tween(proxy)
+                .to({ t: 1 }, 4000)
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .onUpdate(() => {
+                    const alpha = proxy.t;
+                    
+                    // Camera
+                    camera.position.lerpVectors(startFrame.position, endFrame.position, alpha);
+                    controls.target.lerpVectors(startFrame.target, endFrame.target, alpha);
+                    
+                    // Numeric Params
+                    const lerp = (a, b) => a + (b - a) * alpha;
+                    config.particleSize = lerp(startFrame.config.particleSize, endFrame.config.particleSize);
+                    config.turbulence = lerp(startFrame.config.turbulence, endFrame.config.turbulence);
+                    config.depthMultiplier = lerp(startFrame.config.depthMultiplier, endFrame.config.depthMultiplier);
+                    config.bloomStrength = lerp(startFrame.config.bloomStrength, endFrame.config.bloomStrength);
+                    config.saturation = lerp(startFrame.config.saturation, endFrame.config.saturation);
+                    
+                    // Palette
+                    if(alpha > 0.5 && config.paletteMode !== endFrame.config.paletteMode) {
+                        config.paletteMode = endFrame.config.paletteMode;
+                        document.querySelectorAll('.palette-btn').forEach((b, i) => b.classList.toggle('active', i === config.paletteMode));
+                    }
+
+                    // Sync Uniforms
+                    if(uniforms) {
+                        uniforms.uSize.value = config.particleSize;
+                        uniforms.uFlow.value = config.turbulence;
+                        uniforms.uDepth.value = config.depthMultiplier;
+                        uniforms.uPalette.value = config.paletteMode;
+                    }
+                    if(bloomPass) bloomPass.strength = config.bloomStrength;
+                    if(satPass) satPass.uniforms.saturation.value = config.saturation;
+                    
+                    // Weather
+                    config.weather = endFrame.config.weather; 
+                    updateWeatherUniforms();
+                    
+                    // UI Sync
+                    document.getElementById('sizeSlider').value = config.particleSize;
+                    document.getElementById('flowSlider').value = config.turbulence;
+                    document.getElementById('bloomSlider').value = config.bloomStrength;
+                    document.getElementById('satSlider').value = config.saturation;
+                    document.getElementById('depthSlider').value = config.depthMultiplier;
+                })
+                .onComplete(() => {
+                    animateKeyframe(index + 1);
+                })
+                .start();
+        }
+
+        // --- Standard Functions ---
+
+        function updateWeatherUniforms() {
+            if(rainUniforms) { rainUniforms.uAmt.value = config.rainAmt; rainUniforms.uSize.value = config.rainSize; }
+            if(snowUniforms) { snowUniforms.uAmt.value = config.snowAmt; snowUniforms.uSize.value = config.snowSize; }
+            if(textUniforms) { textUniforms.uAmt.value = config.textAmt; textUniforms.uSize.value = config.textSize; textUniforms.uPalette.value = config.paletteMode; }
+            
+            if(rainAudio && rainAudio.readyState >= 1) {
+                if (config.weather.rain) { if(rainAudio.paused) rainAudio.play().catch(()=>{}); rainAudio.volume = Math.min(1.0, config.rainAmt * 0.8); }
+                else { rainAudio.pause(); }
+            }
+            if(windAudio && windAudio.readyState >= 1) {
+                if (config.weather.snow) { if(windAudio.paused) windAudio.play().catch(()=>{}); windAudio.volume = Math.min(1.0, config.snowAmt * 0.8); }
+                else { windAudio.pause(); }
+            }
+            if(rainSys) rainSys.visible = config.weather.rain;
+            if(snowSys) snowSys.visible = config.weather.snow;
+            if(textSys) textSys.visible = config.weather.text;
+        }
+        
+        window.handleUpload = function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const loading = document.getElementById('loading');
+            loading.style.opacity = 1;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const maxSize = 800; 
+                    let w = img.width, h = img.height;
+                    if (w > h && w > maxSize) { h *= maxSize/w; w = maxSize; }
+                    else if (h > maxSize) { w *= maxSize/h; h = maxSize; }
+                    canvas.width = w; canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const data = ctx.getImageData(0, 0, w, h);
+                    generateParticles(data);
+                    setTimeout(() => { loading.style.opacity = 0; }, 500);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        function bindEvents() {
+            // Keyframe Buttons
+            document.getElementById('btn-add-kf').onclick = (e) => { e.stopPropagation(); addKeyframe(); };
+            document.getElementById('btn-clear-kf').onclick = (e) => { e.stopPropagation(); clearKeyframes(); };
+            document.getElementById('btn-play-demo').onclick = (e) => { e.stopPropagation(); playDemo(); };
+            document.getElementById('btn-stop-demo').onclick = (e) => { e.stopPropagation(); stopDemo(); };
+
+            // Aspect Ratio
+            document.querySelectorAll('.aspect-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const r = btn.getAttribute('data-ratio');
+                    config.targetAspect = r === 'full' ? null : parseFloat(r);
+                    document.querySelectorAll('.aspect-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    onWindowResize();
+                });
+            });
+
+            // Weather
+            ['rain', 'snow', 'text'].forEach(type => {
+                const btn = document.getElementById('btn-' + type);
+                if(!btn) return;
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation(); 
+                    if(!sysAudioCtx) setupSystemAudio();
+                    if(sysAudioCtx && sysAudioCtx.state === 'suspended') sysAudioCtx.resume();
+                    config.weather[type] = !config.weather[type];
+                    btn.classList.toggle('active', config.weather[type]);
+                    const panel = document.getElementById('panel-' + type);
+                    if(panel) panel.style.display = config.weather[type] ? 'block' : 'none';
+                    updateWeatherUniforms();
+                });
+            });
+
+            // Palette
+            [0, 1, 2, 3].forEach(i => {
+                const btn = document.getElementById('pal-' + i);
+                if(!btn) return;
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    config.paletteMode = i;
+                    if(uniforms) uniforms.uPalette.value = i;
+                    if(textUniforms) textUniforms.uPalette.value = i;
+                    document.querySelectorAll('.palette-btn').forEach((b, idx) => b.classList.toggle('active', idx === i));
+                });
+            });
+
+            // Camera
+            ['front', 'side', 'top'].forEach(t => {
+                const btn = document.getElementById('btn-view-' + t);
+                if(!btn) return;
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    controls.reset();
+                    ['front', 'side', 'top'].forEach(v => document.getElementById('btn-view-' + v).classList.remove('active'));
+                    btn.classList.add('active');
+                    if(t==='front') camera.position.set(0,0,650);
+                    if(t==='side') camera.position.set(650,0,0);
+                    if(t==='top') camera.position.set(0,650,0.1);
+                });
+            });
+
+            // Rotate
+            document.getElementById('btn-rotate').addEventListener('click', (e) => {
+                e.stopPropagation();
+                config.rotating = !config.rotating;
+                controls.autoRotate = config.rotating;
+                document.getElementById('btn-rotate').classList.toggle('active', config.rotating);
+            });
+
+            // Sliders
+            const link = (id, key, uni, displayId) => {
+                const el = document.getElementById(id);
+                if(!el) return;
+                el.addEventListener('input', e => {
+                    e.stopPropagation();
+                    const v = parseFloat(e.target.value);
+                    config[key] = v;
+                    const targetId = displayId || 'val-'+key;
+                    const valEl = document.getElementById(targetId);
+                    if(valEl) valEl.textContent = v.toFixed(1);
+                    
+                    if(uni && uniforms) uniforms[uni].value = v;
+                    if(key === 'bloomStrength') composer.passes[1].strength = v;
+                    if(key === 'saturation' && satPass) satPass.uniforms.saturation.value = v;
+                    updateWeatherUniforms();
+                });
+            };
+            
+            link('sizeSlider', 'particleSize', 'uSize', 'val-size');
+            link('depthSlider', 'depthMultiplier', 'uDepth', 'val-depth');
+            link('satSlider', 'saturation', null, 'val-sat'); 
+            link('flowSlider', 'turbulence', 'uFlow', 'val-flow');
+            link('bloomSlider', 'bloomStrength', null, 'val-bloom');
+            link('rainAmtSlider', 'rainAmt', null, 'val-rainAmt');
+            link('rainSizeSlider', 'rainSize', null, 'val-rainSize');
+            link('snowAmtSlider', 'snowAmt', null, 'val-snowAmt');
+            link('snowSizeSlider', 'snowSize', null, 'val-snowSize');
+            link('textAmtSlider', 'textAmt', null, 'val-textAmt');
+            link('textSizeSlider', 'textSize', null, 'val-textSize');
+
+            document.getElementById('densitySlider').addEventListener('input', e => {
+                e.stopPropagation();
+                const v = parseInt(e.target.value);
+                const map = [6,4,3,2,1];
+                config.skipFactor = map[v-1];
+                document.getElementById('val-density').textContent = ["极低","低","中等","高","超高"][v-1];
+                if(lastImageData) generateParticles(lastImageData);
+            });
+
+            document.getElementById('recordBtn').onclick = (e) => { 
+                e.stopPropagation(); 
+                if(!sysAudioCtx) setupSystemAudio();
+                if(sysAudioCtx && sysAudioCtx.state === 'suspended') sysAudioCtx.resume();
+                toggleRecording(); 
+            };
+            document.getElementById('audioBtn').onclick = (e) => { e.stopPropagation(); initAudio(); };
+            document.getElementById('randomBtn').onclick = (e) => {
+                e.stopPropagation();
+                const f = Math.random()*2;
+                document.getElementById('flowSlider').value = f;
+                if(uniforms) uniforms.uFlow.value = f;
+                config.turbulence = f;
+            };
+
+            document.getElementById('resetBtn').onclick = (e) => {
+                 e.stopPropagation();
+                 stopDemo(); 
+                 clearKeyframes();
+                 const def = { particleSize: 1.8, turbulence: 1.2, depthMultiplier: 150, bloomStrength: 0.3, saturation: 1.1, skipFactor: 2, paletteMode: 0, weather: { rain: false, snow: false, text: false }, rainAmt: 0.5, rainSize: 1.0, snowAmt: 0.4, snowSize: 1.0, textAmt: 0.3, textSize: 1.0, rotating: false, targetAspect: null };
+                 Object.assign(config, def);
+                 
+                 document.querySelectorAll('.aspect-btn').forEach(b => b.classList.remove('active'));
+                 document.querySelector('.aspect-btn[data-ratio="full"]').classList.add('active');
+                 onWindowResize();
+
+                 document.getElementById('sizeSlider').value = 1.8; document.getElementById('sizeSlider').dispatchEvent(new Event('input'));
+                 document.getElementById('depthSlider').value = 150; document.getElementById('depthSlider').dispatchEvent(new Event('input'));
+                 document.getElementById('satSlider').value = 1.1; document.getElementById('satSlider').dispatchEvent(new Event('input'));
+                 document.getElementById('flowSlider').value = 1.2; document.getElementById('flowSlider').dispatchEvent(new Event('input'));
+                 document.getElementById('bloomSlider').value = 0.3; document.getElementById('bloomSlider').dispatchEvent(new Event('input'));
+                 
+                 ['rain','snow','text'].forEach(t => {
+                     const b = document.getElementById('btn-'+t);
+                     if(b && b.classList.contains('active')) b.click();
+                 });
+                 if(rainAudio) rainAudio.pause();
+                 if(windAudio) windAudio.pause();
+
+                 document.getElementById('pal-0').click();
+                 document.getElementById('btn-view-front').click();
+                 if(config.rotating) document.getElementById('btn-rotate').click();
+            };
+            
+            document.getElementById('btn-modal-close').onclick = () => {
+                 document.getElementById('video-modal').style.display = 'none';
+                 document.getElementById('preview-video').pause();
+            };
+            
+            document.getElementById('fileInput').addEventListener('change', window.handleUpload);
+        }
+
+        function createAmbient() {
+            const pos=[], col=[];
+            for(let i=0; i<1500; i++) { 
+                const r=800+Math.random()*800; const th=Math.random()*Math.PI*2; const ph=Math.acos(2*Math.random()-1); 
+                pos.push(r*Math.sin(ph)*Math.cos(th), r*Math.sin(ph)*Math.sin(th), r*Math.cos(ph));
+                const s=Math.random(); col.push(s*0.05, s*0.05+0.05, s*0.1+0.15);
+            }
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            geo.setAttribute('aColor', new THREE.Float32BufferAttribute(col, 3));
+            ambient = new THREE.Points(geo, new THREE.ShaderMaterial({
+                uniforms: {uTime:{value:0}},
+                vertexShader: `attribute vec3 aColor; varying vec3 vColor; void main(){ vColor=aColor; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_PointSize=1.5*(500.0/-mv.z); gl_Position=projectionMatrix*mv; }`,
+                fragmentShader: `varying vec3 vColor; void main(){ if(length(gl_PointCoord-0.5)>0.5)discard; gl_FragColor=vec4(vColor,0.3); }`,
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+            }));
+            scene.add(ambient);
+        }
+
+        function createRain() {
+            const pos=[], rnd=[];
+            for(let i=0; i<15000; i++) { pos.push((Math.random()-0.5)*1600, (Math.random()-0.5)*1600, (Math.random()-0.5)*1600); rnd.push(Math.random()); }
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            geo.setAttribute('aRnd', new THREE.Float32BufferAttribute(rnd, 1));
+            rainUniforms = { uTime:{value:0}, uLimitTop:{value:800}, uLimitBottom:{value:-800}, uAmt:{value:1}, uSize:{value:1} };
+            rainSys = new THREE.Points(geo, new THREE.ShaderMaterial({
+                uniforms: rainUniforms,
+                vertexShader: `uniform float uTime, uAmt, uSize; attribute float aRnd; varying float vY; varying float vR; void main(){ vR=aRnd; vec3 p=position; float s=5.0*uAmt; float y=p.y-uTime*500.0*s; p.y=mod(y,1600.0)-800.0; vY=p.y; vec4 mv=modelViewMatrix*vec4(p,1.0); gl_PointSize=(8000.0*uSize)/-mv.z; gl_Position=projectionMatrix*mv; }`,
+                fragmentShader: `uniform float uLimitTop, uLimitBottom, uAmt; varying float vY, vR; void main(){ if(vR>uAmt)discard; if(vY>uLimitTop || vY<uLimitBottom)discard; float alpha=smoothstep(uLimitBottom,uLimitBottom+300.0,vY)*(1.0-smoothstep(uLimitTop-200.0,uLimitTop,vY)); float d=abs(gl_PointCoord.x-0.5); float a=1.0-d*30.0; if(a<0.1)discard; gl_FragColor=vec4(0.7,0.8,1.0,a*0.5*alpha); }`,
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+            }));
+            scene.add(rainSys);
+        }
+
+        function createSnow() {
+            const pos=[], rnd=[];
+            for(let i=0; i<8000; i++) { pos.push((Math.random()-0.5)*1600, (Math.random()-0.5)*1600, (Math.random()-0.5)*1600); rnd.push(Math.random()); }
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            geo.setAttribute('aRnd', new THREE.Float32BufferAttribute(rnd, 1));
+            snowUniforms = { uTime:{value:0}, uLimitTop:{value:800}, uLimitBottom:{value:-800}, uAmt:{value:1}, uSize:{value:1} };
+            snowSys = new THREE.Points(geo, new THREE.ShaderMaterial({
+                uniforms: snowUniforms,
+                vertexShader: `
+                    uniform float uTime, uAmt, uSize; attribute float aRnd; varying float vA, vY, vR; 
+                    void main(){ 
+                        vR = aRnd;
+                        vec3 p=position; 
+                        float s=(20.0+aRnd*20.0)*0.5; 
+                        float y=p.y-uTime*s; 
+                        p.y=mod(y,1600.0)-800.0; 
+                        vY = p.y; 
+                        p.x+=sin(uTime+aRnd*10.0)*20.0; 
+                        p.x=mod(p.x+800.0,1600.0)-800.0; 
+                        vA=uTime*(aRnd-0.5)*3.0; 
+                        vec4 mv=modelViewMatrix*vec4(p,1.0); 
+                        gl_PointSize=(24.0+aRnd*20.0)*uSize*(600.0/-mv.z); 
+                        gl_Position=projectionMatrix*mv; 
+                    }`,
+                fragmentShader: `
+                    uniform float uLimitTop, uLimitBottom, uAmt; varying float vA, vY, vR; 
+                    void main(){ 
+                        if(vR > uAmt) discard; 
+                        float maskY = 800.0 - (uLimitTop * 2400.0); 
+                        if (vY > uLimitTop || vY < uLimitBottom) discard;
+                        float alpha = smoothstep(uLimitBottom, uLimitBottom+200.0, vY) * (1.0-smoothstep(uLimitTop-200.0, uLimitTop, vY));
+
+                        vec2 uv=gl_PointCoord-0.5; float c=cos(vA), s=sin(vA); vec2 p=vec2(uv.x*c-uv.y*s, uv.x*s+uv.y*c); float r=length(p)*2.0; if(r>1.0)discard; float a=atan(p.y,p.x); float sec=3.14159/3.0; a=mod(a,sec)-sec*0.5; a=abs(a); vec2 q=r*vec2(sin(a),cos(a)); 
+                        float str=1.0-smoothstep(0.0,0.06,q.x); 
+                        float b1 = 1.0 - smoothstep(0.02, 0.05, abs(abs(q.x) - (q.y - 0.35)*0.5));
+                        float b2 = 1.0 - smoothstep(0.02, 0.05, abs(abs(q.x) - (q.y - 0.65)*0.5));
+                        float cone=smoothstep(0.1,0.2,q.y); 
+                        str=max(str,(b1+b2)*cone); 
+                        str*=(1.0-smoothstep(0.85,1.0,q.y)); 
+                        gl_FragColor=vec4(1.0,1.0,1.0,str*alpha); 
+                    }`,
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+            }));
+            scene.add(snowSys);
+        }
+
+        function createCharAtlas() {
+            const canvas = document.createElement('canvas');
+            const size = 512; const cols = 8; 
+            canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 50px "Microsoft YaHei", Arial';
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.!?@#$%&*+-=/";
+            const cell = size/cols;
+            for(let i=0; i<cols*cols; i++) {
+                const c = chars[i%chars.length];
+                const x = (i%cols)*cell + cell/2;
+                const y = Math.floor(i/cols)*cell + cell/2 + 4; 
+                ctx.fillText(c, x, y);
+            }
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.flipY = false;
+            return tex;
+        }
+
+        function createTextParticles() {
+            const pos = [], rnd = [], idx = [];
+            for(let i=0; i<2000; i++) {
+                pos.push((Math.random()-0.5)*1600, (Math.random()-0.5)*1600, (Math.random()-0.5)*1600);
+                rnd.push(Math.random());
+                idx.push(Math.floor(Math.random()*64)); 
+            }
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            geo.setAttribute('aRnd', new THREE.Float32BufferAttribute(rnd, 1));
+            geo.setAttribute('aIdx', new THREE.Float32BufferAttribute(idx, 1));
+            const tex = createCharAtlas();
+            textUniforms = { uTime:{value:0}, uLimitTop:{value:800}, uLimitBottom:{value:-800}, uAmt:{value:1}, uSize:{value:1}, uTex:{value:tex}, uPalette:{value:0} };
+            textSys = new THREE.Points(geo, new THREE.ShaderMaterial({
+                uniforms: textUniforms,
+                vertexShader: `uniform float uTime, uAmt, uSize; attribute float aRnd; attribute float aIdx; varying float vA, vY, vR, vIdx; void main(){ vR=aRnd; vIdx=aIdx; vec3 p=position; float s=(10.0+aRnd*10.0)*0.5; float y=p.y-uTime*s; p.y=mod(y,1600.0)-800.0; vY=p.y; float angle=uTime*(aRnd-0.5)*1.0; vA=angle; vec4 mv=modelViewMatrix*vec4(p,1.0); gl_PointSize=(40.0+aRnd*30.0)*uSize*(600.0/-mv.z); gl_Position=projectionMatrix*mv; }`,
+                fragmentShader: `uniform float uLimitTop, uLimitBottom, uAmt; uniform sampler2D uTex; uniform int uPalette; varying float vA, vY, vR, vIdx; void main(){ float densityAlpha=smoothstep(uAmt, uAmt-0.1, vR); float alpha=smoothstep(uLimitBottom, uLimitBottom+200.0, vY)*(1.0-smoothstep(uLimitTop-200.0, uLimitTop, vY)); float finalAlpha=alpha*densityAlpha; if(finalAlpha<0.01)discard; vec2 uv=gl_PointCoord; vec2 centered=uv-0.5; float c=cos(vA), s=sin(vA); vec2 rotated=vec2(centered.x*c-centered.y*s, centered.x*s+centered.y*c); uv=rotated+0.5; float cols=8.0; float row=floor(vIdx/cols); float col=mod(vIdx,cols); vec2 cellUV=uv/cols; cellUV.x+=col/cols; cellUV.y+=(7.0-row)/cols; vec4 texColor=texture2D(uTex, cellUV); if(texColor.a<0.1)discard; vec3 color=vec3(1.0); if(uPalette==1)color=vec3(0.0,1.0,1.0); else if(uPalette==2)color=vec3(1.0,0.8,0.2); else if(uPalette==3){ color=0.5+0.5*cos(vIdx*0.5+vec3(0.0,0.33,0.67)); } gl_FragColor=vec4(color, texColor.a*finalAlpha); }`,
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+            }));
+            scene.add(textSys);
+        }
+
+        function generateParticles(imgData) {
+            if(particles) { scene.remove(particles); particles.geometry.dispose(); }
+            lastImageData = imgData;
+            const pos=[], col=[], bright=[], rnd=[];
+            const {width, height, data} = imgData;
+            const cx = width/2, cy = height/2;
+            const skip = config.skipFactor;
+            for(let y=0; y<height; y+=skip) {
+                for(let x=0; x<width; x+=skip) {
+                    const i = (y*width+x)*4;
+                    if(data[i+3] < 50) continue;
+                    const r=data[i]/255, g=data[i+1]/255, b=data[i+2]/255;
+                    const lum = 0.21*r + 0.71*g + 0.07*b;
+                    if(lum < 0.08 && Math.max(r,g,b) < 0.1) continue;
+                    pos.push((x-cx)*1.1, -(y-cy)*1.1, 0);
+                    col.push(r,g,b);
+                    bright.push(lum);
+                    rnd.push(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5);
+                }
+            }
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            geo.setAttribute('aColor', new THREE.Float32BufferAttribute(col, 3));
+            geo.setAttribute('aBrightness', new THREE.Float32BufferAttribute(bright, 1));
+            geo.setAttribute('aRandom', new THREE.Float32BufferAttribute(rnd, 3));
+            
+            uniforms = {
+                uTime: {value:0}, uSize: {value: config.particleSize}, uFlow: {value: config.turbulence},
+                uDepth: {value: config.depthMultiplier}, uMouse: {value: new THREE.Vector3(9999,9999,0)},
+                uExplode: {value:0}, uVortex: {value:0}, uPalette: {value:config.paletteMode}, uBass: {value:0}
+            };
+            const mat = new THREE.ShaderMaterial({
+                uniforms,
+                vertexShader: `
+                    ${snoise}
+                    uniform float uTime, uSize, uDepth, uFlow, uExplode, uVortex, uBass;
+                    attribute float aBrightness; attribute vec3 aColor, aRandom;
+                    varying vec3 vColor; varying float vBright;
+                    vec2 rot(vec2 p, float a) { float s=sin(a), c=cos(a); return vec2(p.x*c-p.y*s, p.x*s+p.y*c); }
+                    void main() {
+                        vColor = aColor; vBright = aBrightness;
+                        vec3 p = position;
+                        p.z += (aBrightness-0.5) * uDepth;
+                        p.z += uBass * 50.0 * aBrightness;
+                        float t = uTime * 0.2;
+                        float n = snoise(vec3(p.x*0.005+t, p.y*0.005, p.z*0.005));
+                        p += vec3(n) * 20.0 * uFlow;
+                        if(uExplode > 0.0) p += aRandom * uExplode * 500.0;
+                        if(uVortex > 0.0) {
+                            float d = length(p.xy);
+                            p.xy = rot(p.xy, (d*0.01 + t*2.0) * uVortex * 2.0);
+                            p.xy *= (1.0 - uVortex*0.6);
+                            p.z -= uVortex * 300.0;
+                        }
+                        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+                        gl_PointSize = uSize * (600.0 / -mv.z) * (0.6 + aBrightness * 1.5 + uBass * 0.5);
+                        gl_Position = projectionMatrix * mv;
+                    }
+                `,
+                fragmentShader: `
+                    uniform int uPalette; varying vec3 vColor; varying float vBright;
+                    void main() {
+                        if(length(gl_PointCoord-0.5)>0.5) discard;
+                        vec3 c = vColor;
+                        if(uPalette==1) c = mix(vec3(0.1,0,0.3), vec3(0,1,1), vBright);
+                        else if(uPalette==2) c = mix(vec3(0), vec3(1,0.8,0.2), pow(vBright,0.5));
+                        else if(uPalette==3) { c = 0.5 + 0.5 * cos(6.28318 * (vBright + vec3(0.0, 0.33, 0.67))); }
+                        c = c * 1.2 + 0.1;
+                        gl_FragColor = vec4(c, 0.9);
+                    }
+                `,
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+            });
+            particles = new THREE.Points(geo, mat);
+            scene.add(particles);
+        }
+
+        function onMouseMove(e) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            if(uniforms) uniforms.uMouse.value.set(mouse.x*1000, mouse.y*1000, 0);
+        }
+
+        function onWindowResize() {
+            let width = window.innerWidth;
+            let height = window.innerHeight;
+            if (config.targetAspect !== null) {
+                const windowAspect = width / height;
+                if (windowAspect > config.targetAspect) {
+                    width = height * config.targetAspect;
+                } else {
+                    height = width / config.targetAspect;
+                }
+            }
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+            composer.setSize(width, height);
+        }
+
+        function toggleRecording() {
+            if(!isRecording) {
+                startRecording();
+                document.getElementById('recordBtn').innerHTML = "⏹️ 停止并保存";
+                document.getElementById('recordBtn').classList.add('recording');
+                isRecording = true;
+            } else {
+                stopRecording();
+                document.getElementById('recordBtn').innerHTML = "⏺️ 录制视频 (含音效)";
+                document.getElementById('recordBtn').classList.remove('recording');
+                isRecording = false;
+            }
+        }
+
+        function startRecording() {
+            recordedChunks = [];
+            const canvasStream = renderer.domElement.captureStream(60); 
+            let tracks = [...canvasStream.getVideoTracks()];
+            if(sysAudioCtx && sysAudioDest) {
+                const audioStream = sysAudioDest.stream;
+                const audioTracks = audioStream.getAudioTracks();
+                if(audioTracks.length > 0) tracks.push(audioTracks[0]);
+            }
+            const finalStream = new MediaStream(tracks);
+            const commonOptions = { videoBitsPerSecond: 20000000 };
+            let options = { ...commonOptions, mimeType: 'video/mp4; codecs=avc1' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options = { ...commonOptions, mimeType: 'video/mp4' };
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = { ...commonOptions, mimeType: 'video/webm; codecs=vp9' };
+                    if (!MediaRecorder.isTypeSupported(options.mimeType)) options = { ...commonOptions, mimeType: 'video/webm' };
+                }
+            }
+            try { mediaRecorder = new MediaRecorder(finalStream, options); } catch(e) { mediaRecorder = new MediaRecorder(finalStream); }
+            mediaRecorder.ondataavailable = e => { if(e.data.size>0) recordedChunks.push(e.data); };
+            mediaRecorder.onstop = showPreview;
+            mediaRecorder.start();
+        }
+
+        function stopRecording() { if(mediaRecorder) mediaRecorder.stop(); }
+
+        function showPreview() {
+            if(!recordedChunks.length) return;
+            const type = mediaRecorder.mimeType || 'video/mp4';
+            const blob = new Blob(recordedChunks, {type: type});
+            const url = URL.createObjectURL(blob);
+            const vid = document.getElementById('preview-video');
+            vid.src = url;
+            const dl = document.getElementById('download-link');
+            dl.href = url;
+            let ext = 'mp4';
+            if (type.includes('webm')) ext = 'webm';
+            dl.innerText = `💾 保存视频 (.${ext})`;
+            dl.download = `particle_art_${Date.now()}.${ext}`;
+            document.getElementById('video-modal').style.display = 'flex';
+            vid.play();
+        }
+
+        function initAudio() {
+             if(isAudioActive) return;
+             try {
+                 audioContext = new (window.AudioContext||window.webkitAudioContext)();
+                 analyser = audioContext.createAnalyser();
+                 analyser.fftSize = 256;
+                 dataArray = new Uint8Array(analyser.frequencyBinCount);
+                 navigator.mediaDevices.getUserMedia({audio:true}).then(s => {
+                     audioContext.createMediaStreamSource(s).connect(analyser);
+                     isAudioActive = true;
+                     document.getElementById('audioBtn').classList.add('active');
+                 });
+             } catch(e){ console.error("Mic error:", e); }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            TWEEN.update(); 
+            
+            const t = clock.getElapsedTime();
+            
+            if(uniforms) {
+                uniforms.uTime.value = t;
+                explodeVal += ((isExploding?1:0) - explodeVal)*0.05;
+                uniforms.uExplode.value = explodeVal;
+                vortexVal += ((isVortex?1:0) - vortexVal)*0.05;
+                uniforms.uVortex.value = vortexVal;
+            }
+            
+            const w = config.weather;
+            const fallSpeed = 25.0;
+            
+            if(w.rain) { if(rainLimitBottom > -800) rainLimitBottom -= fallSpeed; rainLimitTop = 800; }
+            else { if(rainLimitTop > -800) rainLimitTop -= fallSpeed; }
+
+            if(w.snow) { if(snowLimitBottom > -800) snowLimitBottom -= fallSpeed; snowLimitTop = 800; }
+            else { if(snowLimitTop > -800) snowLimitTop -= fallSpeed; }
+
+            if(w.text) { if(textLimitBottom > -800) textLimitBottom -= fallSpeed; textLimitTop = 800; }
+            else { if(textLimitTop > -800) textLimitTop -= fallSpeed; }
+            
+            if(rainUniforms) { rainUniforms.uTime.value=t; rainUniforms.uLimitTop.value=rainLimitTop; rainUniforms.uLimitBottom.value=rainLimitBottom; }
+            if(snowUniforms) { snowUniforms.uTime.value=t; snowUniforms.uLimitTop.value=snowLimitTop; snowUniforms.uLimitBottom.value=snowLimitBottom; }
+            if(textUniforms) { textUniforms.uTime.value=t; textUniforms.uLimitTop.value=textLimitTop; textUniforms.uLimitBottom.value=textLimitBottom; }
+            
+            if(ambient) ambient.rotation.y = t * 0.02;
+
+            if(isAudioActive && analyser) {
+                analyser.getByteFrequencyData(dataArray);
+                let b=0; for(let i=0;i<10;i++) b+=dataArray[i];
+                audioBass += (b/10/255 - audioBass)*0.2;
+                if(uniforms) uniforms.uBass.value = audioBass;
+            }
+
+            controls.update();
+            composer.render();
+        }
+
+        function init() {
+            try {
+                const container = document.getElementById('canvas-container');
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x050508);
+                scene.fog = new THREE.FogExp2(0x050508, 0.0008);
+
+                camera = new THREE.PerspectiveCamera(55, window.innerWidth/window.innerHeight, 0.1, 5000);
+                camera.position.set(0, 0, 650);
+
+                renderer = new THREE.WebGLRenderer({ 
+                    antialias: false, 
+                    powerPreference: "high-performance",
+                    preserveDrawingBuffer: true 
+                });
+                
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0)); 
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                container.appendChild(renderer.domElement);
+
+                const renderPass = new RenderPass(scene, camera);
+                bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+                bloomPass.threshold = 0.1;
+                bloomPass.strength = config.bloomStrength;
+                bloomPass.radius = 0.5;
+                
+                satPass = new ShaderPass(SaturationShader);
+                satPass.uniforms.saturation.value = config.saturation;
+                
+                composer = new EffectComposer(renderer);
+                composer.addPass(renderPass);
+                composer.addPass(bloomPass);
+                composer.addPass(satPass); 
+
+                controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.autoRotate = config.rotating;
+                controls.autoRotateSpeed = 0.5;
+                // CHANGED: Enable panning (right-click drag to move)
+                controls.enablePan = true;
+                // CHANGED: Screen space panning is more intuitive for 2D-like movement
+                controls.screenSpacePanning = true; 
+
+                createAmbient();
+                createRain();
+                createSnow();
+                createTextParticles();
+
+                window.addEventListener('resize', onWindowResize);
+                window.addEventListener('mousemove', onMouseMove);
+                
+                window.addEventListener('mousedown', e => { 
+                    if (e.target.closest('#ui-layer') && !e.target.closest('#camera-controls')) return;
+                    // CHANGED: Removed right-click (button 2) vortex trigger to allow clean panning
+                    if(e.button===0) isExploding=true; 
+                });
+                
+                // CHANGED: Removed isVortex reset
+                window.addEventListener('mouseup', () => { isExploding=false; });
+                window.addEventListener('contextmenu', e => e.preventDefault());
+                
+                bindEvents();
+                onWindowResize();
+                animate();
+            } catch(e) {
+                alert("初始化失败: " + e.message);
+                console.error(e);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
